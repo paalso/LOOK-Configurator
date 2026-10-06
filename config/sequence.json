@@ -1,6 +1,7 @@
 ﻿{
   "sequence": [
     "power-lock",
-    "local-accounts"
+    "local-accounts",
+    "restore-point"
   ]
 }

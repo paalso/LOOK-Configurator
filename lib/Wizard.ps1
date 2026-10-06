@@ -1,25 +1,41 @@
 ﻿# Ядро мастера: загрузка шагов, выполнение Apply/Verify/Rollback, меню.
 
 function Get-Steps {
+    # Элемент sequence: строка "id" ИЛИ объект { "id": "...", "use": "<файл шага>", "title": "..." }.
+    # Объект позволяет вставить один и тот же шаг несколько раз (например, restore-point: "clean", "base policy").
     $seqPath = Join-Path $Script:Root 'config\sequence.json'
     $sequence = @((Get-Content -Path $seqPath -Raw -Encoding UTF8 | ConvertFrom-Json).sequence)
     $steps = @()
-    foreach ($id in $sequence) {
-        $path = Join-Path $Script:Root "steps\$id.ps1"
+    $seen = @{}
+    $usedFiles = @{}
+    foreach ($entry in $sequence) {
+        if ($entry -is [string]) { $id = $entry; $use = $entry; $title = $null }
+        else {
+            $id = [string]$entry.id
+            $use = if ($entry.use) { [string]$entry.use } else { $id }
+            $title = $entry.title
+        }
+        $usedFiles[$use] = $true
+        if ($seen.ContainsKey($id)) { Write-Ui "Шаг '$id' указан в sequence.json больше одного раза: повтор пропущен." Red; continue }
+        $seen[$id] = $true
+        $path = Join-Path $Script:Root "steps\$use.ps1"
         if (-not (Test-Path $path)) {
-            Write-Ui "Шаг '$id' есть в sequence.json, но файл не найден: $path" Red
+            Write-Ui "Шаг '$id': файл не найден: $path" Red
             continue
         }
         $step = & $path
         $missing = @('Id', 'Title', 'Apply', 'Verify') | Where-Object { -not $step.ContainsKey($_) }
         if ($missing) { Write-Ui "Шаг '$id': нет обязательных полей: $($missing -join ', ')" Red; continue }
-        if ($step.Id -ne $id) { Write-Ui "Шаг '$id': Id внутри файла ($($step.Id)) не совпадает с именем файла" Red; continue }
+        if ($step.Id -ne $use) { Write-Ui "Шаг '$id': Id внутри файла ($($step.Id)) не совпадает с именем файла '$use'" Red; continue }
+        $step.UseId = $use
+        $step.Id = $id
+        if ($title) { $step.Title = [string]$title }
         if (-not $step.ContainsKey('Reversible')) { $step.Reversible = $true }
         $steps += $step
     }
     # Предупредим о файлах шагов, не включённых в последовательность.
     Get-ChildItem -Path (Join-Path $Script:Root 'steps') -Filter '*.ps1' | ForEach-Object {
-        if ($sequence -notcontains $_.BaseName) {
+        if (-not $usedFiles.ContainsKey($_.BaseName)) {
             Write-Ui "Внимание: steps\$($_.Name) не указан в config\sequence.json (не будет выполнен)." DarkYellow
         }
     }
@@ -30,7 +46,12 @@ function New-StepContext {
     param($Step)
     $params = @{}
     $stepsCfg = $Script:LookProfile.steps
-    if ($stepsCfg -and $stepsCfg.ContainsKey($Step.Id)) { $params = $stepsCfg[$Step.Id] }
+    if ($stepsCfg) {
+        # Экземпляр шага наследует настройки шага-образца (UseId) и переопределяет своими (Id).
+        $use = if ($Step.ContainsKey('UseId')) { $Step.UseId } else { $Step.Id }
+        if ($stepsCfg.ContainsKey($use)) { $params = $stepsCfg[$use] }
+        if ($Step.Id -ne $use -and $stepsCfg.ContainsKey($Step.Id)) { $params = Merge-Hashtable $params $stepsCfg[$Step.Id] }
+    }
     @{ Id = $Step.Id; Step = $Step; Params = $params; Profile = $Script:LookProfile }
 }
 

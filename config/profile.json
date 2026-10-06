@@ -47,6 +47,13 @@
           "HomeFolder": true
         }
       ]
+    },
+    "restore-point": {
+      "Drive": "C:",
+      "MaxSize": "15GB",
+      "PointName": "Clean system",
+      "AskForName": true,
+      "MinRestorePoints": 1
     }
   }
 }

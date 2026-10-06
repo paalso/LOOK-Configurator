@@ -13,11 +13,12 @@ Start.cmd                 запуск
 Start-Configurator.ps1    точка входа: права администратора, загрузка lib\, главное меню
 lib\Common.ps1            вывод, лог, состояние, Invoke-Native, проверки
 lib\Wizard.ps1            ядро: загрузка шагов, Apply/Verify/Rollback, меню
-lib\Power.ps1, Accounts.ps1  помощники по областям (далее Registry, Services, Lgpo, ...)
+lib\Power.ps1, Accounts.ps1, RestorePoint.ps1  помощники по областям (далее Registry, Services, Lgpo, ...)
 steps\<id>.ps1            по одному файлу на шаг
 config\sequence.json      порядок шагов (меняйте порядок/добавляйте/убирайте здесь)
 config\profile.json       параметры (значения для шагов, данные устройства), хранится в git
 config\profile.local.json  (в .gitignore, необязательно) переопределения поверх profile.json: реальные пароли
+tools\                    автономные скрипты (работают без мастера), напр. New-RestorePoint.ps1
 state\                    (в .gitignore) state.json, резервные значения для отката, логи
 ```
 
@@ -55,3 +56,21 @@ state\                    (в .gitignore) state.json, резервные зна�
 `ask` (по умолчанию) — показать список изменений и спросить. Ответ запоминается до отката шага.
 Учётки, созданные самим мастером, этой политике не подчиняются. Перед заменой ACL существующей папки прежний ACL (SDDL)
 сохраняется и возвращается при откате.
+
+## Экземпляры шага (один шаг несколько раз)
+В `config\sequence.json` элемент может быть объектом, тогда один файл шага используется повторно:
+```json
+{ "sequence": [ "restore-point",
+                { "id": "restore-point-policy", "use": "restore-point", "title": "Точка відновлення: base policy" } ] }
+```
+Настройки экземпляра берутся из `steps.<id>` и накладываются на настройки образца `steps.<use>`:
+```json
+"restore-point-policy": { "PointName": "Base policy" }
+```
+Состояние и резервные копии у каждого экземпляра свои.
+
+## Точка восстановления (шаг restore-point)
+Без GUI: `Enable-ComputerRestore`, `vssadmin resize shadowstorage`, `Checkpoint-Computer`. Параметры: `Drive`, `MaxSize`
+(`15GB` | `10%` | `UNBOUNDED`), `PointName` (значение по умолчанию; при `AskForName=true` спрашивается при запуске),
+`MinRestorePoints`. Windows не создаёт точки чаще раза в 24 часа: на время создания ограничение снимается и возвращается.
+Откат намеренно не предусмотрен. Автономный вариант без мастера: `tools\New-RestorePoint.ps1 -Name 'Base policy'`.

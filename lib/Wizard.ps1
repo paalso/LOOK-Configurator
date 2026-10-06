@@ -30,9 +30,7 @@ function New-StepContext {
     param($Step)
     $params = @{}
     $stepsCfg = $Script:LookProfile.steps
-    if ($stepsCfg -and $stepsCfg.PSObject.Properties[$Step.Id]) {
-        $params = ConvertTo-Hashtable $stepsCfg.($Step.Id)
-    }
+    if ($stepsCfg -and $stepsCfg.ContainsKey($Step.Id)) { $params = $stepsCfg[$Step.Id] }
     @{ Id = $Step.Id; Step = $Step; Params = $params; Profile = $Script:LookProfile }
 }
 

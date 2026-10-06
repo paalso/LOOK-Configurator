@@ -8,6 +8,45 @@
       "DisplayOffDcMinutes": 10,
       "SleepAfterAcMinutes": 10,
       "SleepAfterDcMinutes": 10
+    },
+    "local-accounts": {
+      "UsersRoot": "D:\\Users",
+      "ExistingAccount": "ask",
+      "Accounts": [
+        {
+          "Name": "SecAdmin",
+          "Password": "$RFV5tgb6yhn",
+          "Groups": [
+            "Administrators"
+          ],
+          "PasswordNeverExpires": true,
+          "FullName": "Security Administrator",
+          "Description": "Адміністратор безпеки",
+          "HomeFolder": true
+        },
+        {
+          "Name": "SysAdmin",
+          "Password": "$RFV5tgb6yhn",
+          "Groups": [
+            "Administrators"
+          ],
+          "PasswordNeverExpires": true,
+          "FullName": "System Administrator",
+          "Description": "Системний адміністратор",
+          "HomeFolder": true
+        },
+        {
+          "Name": "User1",
+          "Password": "@WSX3edc4rfv",
+          "Groups": [
+            "Users"
+          ],
+          "PasswordNeverExpires": false,
+          "FullName": "User1",
+          "Description": "Користувач",
+          "HomeFolder": true
+        }
+      ]
     }
   }
 }

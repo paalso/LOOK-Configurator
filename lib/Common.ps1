@@ -61,7 +61,7 @@ function ConvertTo-Hashtable {
     # JSON -> вложенные хэштаблицы (в PS 5.1 ConvertFrom-Json отдаёт неизменяемые PSCustomObject).
     param($InputObject)
     if ($null -eq $InputObject) { return $null }
-    if ($InputObject -is [pscustomobject]) {
+    if ($InputObject -is [System.Management.Automation.PSCustomObject]) {   # не [pscustomobject]: тот ловит и строки
         $h = @{}
         foreach ($p in $InputObject.PSObject.Properties) { $h[$p.Name] = ConvertTo-Hashtable $p.Value }
         return $h
@@ -70,6 +70,20 @@ function ConvertTo-Hashtable {
         return , @($InputObject | ForEach-Object { ConvertTo-Hashtable $_ })
     }
     $InputObject
+}
+
+function Merge-Hashtable {
+    # Глубокое слияние: словари объединяются, массивы и скаляры заменяются целиком.
+    param([hashtable]$Base, [hashtable]$Override)
+    $r = @{}
+    foreach ($k in $Base.Keys) { $r[$k] = $Base[$k] }
+    foreach ($k in $Override.Keys) {
+        if ($r.ContainsKey($k) -and $r[$k] -is [hashtable] -and $Override[$k] -is [hashtable]) {
+            $r[$k] = Merge-Hashtable $r[$k] $Override[$k]
+        }
+        else { $r[$k] = $Override[$k] }
+    }
+    $r
 }
 
 # ---------- Состояние мастера (state\state.json, у каждой машины своё) ----------
@@ -82,7 +96,13 @@ function Initialize-Environment {
     $Script:StatePath = Join-Path $Script:StateDir 'state.json'
 
     $profilePath = Join-Path $Script:Root 'config\profile.json'
-    $Script:LookProfile = Get-Content -Path $profilePath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $Script:LookProfile = ConvertTo-Hashtable (Get-Content -Path $profilePath -Raw -Encoding UTF8 | ConvertFrom-Json)
+    # Локальные переопределения (пароли, имя устройства): не коммитятся в git.
+    $localPath = Join-Path $Script:Root 'config\profile.local.json'
+    if (Test-Path $localPath) {
+        $local = ConvertTo-Hashtable (Get-Content -Path $localPath -Raw -Encoding UTF8 | ConvertFrom-Json)
+        $Script:LookProfile = Merge-Hashtable $Script:LookProfile $local
+    }
 
     $Script:State = @{ steps = @{} }
     if (Test-Path $Script:StatePath) {
@@ -116,6 +136,20 @@ function Set-StepState {
     $entry.status = $Status
     $entry.time = (Get-Date).ToString('s')
     if ($PSBoundParameters.ContainsKey('Backup')) { $entry.backup = $Backup }
-    if ($ClearBackup) { $entry.Remove('backup') }
+    if ($ClearBackup) { $entry.Remove('backup'); $entry.Remove('data') }   # откат сбрасывает и сохранённые решения
+    Save-State
+}
+
+function Get-StepData {
+    # Произвольные данные шага, сохраняемые между запусками (например, решения пользователя). Живой хэш из состояния.
+    param([Parameter(Mandatory)][string]$Id)
+    $e = Get-StepState -Id $Id
+    if ($e -and $e.ContainsKey('data')) { $e.data } else { @{} }
+}
+
+function Set-StepData {
+    param([Parameter(Mandatory)][string]$Id, [Parameter(Mandatory)][hashtable]$Data)
+    if (-not $Script:State.steps.ContainsKey($Id)) { $Script:State.steps[$Id] = @{ status = 'pending'; time = (Get-Date).ToString('s') } }
+    $Script:State.steps[$Id].data = $Data
     Save-State
 }

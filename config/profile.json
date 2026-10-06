@@ -1,0 +1,13 @@
+﻿{
+  "device": {
+    "name": ""
+  },
+  "steps": {
+    "power-lock": {
+      "DisplayOffAcMinutes": 10,
+      "DisplayOffDcMinutes": 10,
+      "SleepAfterAcMinutes": 10,
+      "SleepAfterDcMinutes": 10
+    }
+  }
+}

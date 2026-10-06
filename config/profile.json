@@ -62,6 +62,14 @@
       "MinimumPasswordLength": 12,
       "PasswordComplexity": 1,
       "ClearTextPassword": 0
+    },
+    "audit-policy": {
+      "Default": {
+        "Success": true,
+        "Failure": true
+      },
+      "Overrides": {},
+      "ForceSubcategoryOverride": true
     }
   }
 }

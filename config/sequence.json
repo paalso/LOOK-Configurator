@@ -3,6 +3,7 @@
     "power-lock",
     "local-accounts",
     "restore-point",
-    "password-policy"
+    "password-policy",
+    "audit-policy"
   ]
 }

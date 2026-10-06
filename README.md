@@ -13,7 +13,7 @@ Start.cmd                 запуск
 Start-Configurator.ps1    точка входа: права администратора, загрузка lib\, главное меню
 lib\Common.ps1            вывод, лог, состояние, Invoke-Native, проверки
 lib\Wizard.ps1            ядро: загрузка шагов, Apply/Verify/Rollback, меню
-lib\Power.ps1, Accounts.ps1, RestorePoint.ps1, SecPol.ps1  помощники по областям (далее Registry, Services, Lgpo, ...)
+lib\Power.ps1, Accounts.ps1, RestorePoint.ps1, SecPol.ps1, AuditPolicy.ps1  помощники по областям (далее Registry, Services, Lgpo, ...)
 steps\<id>.ps1            по одному файлу на шаг
 config\sequence.json      порядок шагов (меняйте порядок/добавляйте/убирайте здесь)
 config\profile.json       параметры (значения для шагов, данные устройства), хранится в git
@@ -81,3 +81,13 @@ state\                    (в .gitignore) state.json, резервные зна�
 (меняются только перечисленные параметры). Перед применением полный экспорт сохраняется в `state\backups\<шаг>-before-<время>.inf`.
 Ограничение: данные шага и `$Script:` внутри файла шага недоступны (у файла свой script-scope), поэтому всё, что
 использует состояние мастера, вынесено в функции lib\.
+
+## Политика аудита (шаг audit-policy)
+Настраивается расширенная политика (подкатегории) через `auditpol`, по GUID. Базовые категории (Audit account logon events и т.д.)
+в Windows 11 перекрываются подкатегориями. `ForceSubcategoryOverride` ставит `SCENoApplyLegacyAuditPolicy=1`.
+`Default` относится ко всем подкатегориям, найденным в системе; исключения по GUID задаются в `Overrides`:
+```json
+"audit-policy": { "Default": { "Success": true, "Failure": true },
+                  "Overrides": { "{0CCE9225-69AE-11D9-BED3-505054503030}": { "Success": false, "Failure": false } } }
+```
+Список подкатегорий и их GUID: `auditpol /list /subcategory:* /v`. Откат делает `auditpol /restore` из копии в `state\backups\*.csv`.

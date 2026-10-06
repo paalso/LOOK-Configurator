@@ -13,7 +13,7 @@ Start.cmd                 запуск
 Start-Configurator.ps1    точка входа: права администратора, загрузка lib\, главное меню
 lib\Common.ps1            вывод, лог, состояние, Invoke-Native, проверки
 lib\Wizard.ps1            ядро: загрузка шагов, Apply/Verify/Rollback, меню
-lib\Power.ps1, Accounts.ps1, RestorePoint.ps1  помощники по областям (далее Registry, Services, Lgpo, ...)
+lib\Power.ps1, Accounts.ps1, RestorePoint.ps1, SecPol.ps1  помощники по областям (далее Registry, Services, Lgpo, ...)
 steps\<id>.ps1            по одному файлу на шаг
 config\sequence.json      порядок шагов (меняйте порядок/добавляйте/убирайте здесь)
 config\profile.json       параметры (значения для шагов, данные устройства), хранится в git
@@ -74,3 +74,10 @@ state\                    (в .gitignore) state.json, резервные зна�
 (`15GB` | `10%` | `UNBOUNDED`), `PointName` (значение по умолчанию; при `AskForName=true` спрашивается при запуске),
 `MinRestorePoints`. Windows не создаёт точки чаще раза в 24 часа: на время создания ограничение снимается и возвращается.
 Откат намеренно не предусмотрен. Автономный вариант без мастера: `tools\New-RestorePoint.ps1 -Name 'Base policy'`.
+
+## Политики безопасности через secedit (lib\SecPol.ps1)
+Политика паролей и блокировки учётных записей лежит в SAM/LSA, а не в реестре, поэтому reg.exe и LGPO по реестру её не меняют.
+Используется `secedit`: `/export` для чтения (проверка и резервная копия), `/configure` с минимальным .inf для записи
+(меняются только перечисленные параметры). Перед применением полный экспорт сохраняется в `state\backups\<шаг>-before-<время>.inf`.
+Ограничение: данные шага и `$Script:` внутри файла шага недоступны (у файла свой script-scope), поэтому всё, что
+использует состояние мастера, вынесено в функции lib\.

@@ -54,6 +54,14 @@
       "PointName": "Clean system",
       "AskForName": true,
       "MinRestorePoints": 1
+    },
+    "password-policy": {
+      "PasswordHistorySize": 24,
+      "MaximumPasswordAge": 31,
+      "MinimumPasswordAge": 30,
+      "MinimumPasswordLength": 12,
+      "PasswordComplexity": 1,
+      "ClearTextPassword": 0
     }
   }
 }

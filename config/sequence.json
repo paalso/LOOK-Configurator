@@ -2,6 +2,7 @@
   "sequence": [
     "power-lock",
     "local-accounts",
-    "restore-point"
+    "restore-point",
+    "password-policy"
   ]
 }

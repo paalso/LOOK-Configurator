@@ -6,6 +6,8 @@
     "password-policy",
     "audit-policy",
     "user-rights",
-    "security-options"
+    "event-log-settings",
+    "security-options",
+    "eventvwr-access"
   ]
 }

@@ -15,6 +15,10 @@ $Script:WellKnownPrincipals = @{
     'everyone'            = 'S-1-1-0'
     'anonymous logon'     = 'S-1-5-7'
     'authenticated users' = 'S-1-5-11'
+    'trustedinstaller'    = 'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'
+    'nt service\trustedinstaller' = 'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'
+    'all application packages' = 'S-1-15-2-1'
+    'all restricted application packages' = 'S-1-15-2-2'
 }
 
 function Convert-NameToSid {

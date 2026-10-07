@@ -286,6 +286,33 @@
         //     0 = Вимкнено
         "FilterAdministratorToken": 0
       }
+    },
+
+    // 4.1 Журнал подій: розмір (КБ, кратно 64) і метод збереження. Retention: Circular = перезаписувати старі події за необхідності;
+    // AutoBackup = архівувати; Retain = не перезаписувати. Журнал безпеки змінює лише акаунт із правом SeSecurityPrivilege (SecAdmin).
+    "event-log-settings": {
+      "Logs": {
+        // 1, 4. Application: 196 608 KB, перезаписувати за необхідності
+        "Application": { "MaxSizeKB": 196608, "Retention": "Circular" },
+        // 2, 5. Security: 102 400 KB, перезаписувати за необхідності
+        "Security": { "MaxSizeKB": 102400, "Retention": "Circular" },
+        // 3, 6. System: 307 200 KB, перезаписувати за необхідності
+        "System": { "MaxSizeKB": 307200, "Retention": "Circular" }
+      }
+    },
+
+    // 4.1 Власник і дозволи eventvwr.exe / eventvwr.msc (ЦПБ AU-9, AC-6(1)).
+    // Власник: група Administrators. Дозволи: лише ці записи (Administrators і Users видаляються), без успадкування.
+    "eventvwr-access": {
+      "Files": [ "C:\\Windows\\System32\\eventvwr.exe", "C:\\Windows\\System32\\eventvwr.msc" ],
+      "Owner": "Administrators",
+      "Entries": [
+        { "Principal": "TrustedInstaller", "Rights": "FullControl" },
+        { "Principal": "System", "Rights": "ReadAndExecute" },
+        { "Principal": "All Application Packages", "Rights": "ReadAndExecute" },
+        { "Principal": "All Restricted Application Packages", "Rights": "ReadAndExecute" },
+        { "Principal": "{SecurityAdmin}", "Rights": "FullControl" }
+      ]
     }
   }
 }

@@ -13,7 +13,7 @@ Start.cmd                 запуск
 Start-Configurator.ps1    точка входа: права администратора, загрузка lib\, главное меню
 lib\Common.ps1            вывод, лог, состояние, Invoke-Native, проверки
 lib\Wizard.ps1            ядро: загрузка шагов, Apply/Verify/Rollback, меню
-lib\Power.ps1, Accounts.ps1, RestorePoint.ps1, SecPol.ps1, AuditPolicy.ps1, UserRights.ps1, Registry.ps1, SecurityOptions.ps1  помощники по областям (далее Registry, Services, Lgpo, ...)
+lib\Power.ps1, Accounts.ps1, RestorePoint.ps1, SecPol.ps1, AuditPolicy.ps1, UserRights.ps1, Registry.ps1, SecurityOptions.ps1, FileSecurity.ps1, EventLog.ps1  помощники по областям (далее Registry, Services, Lgpo, ...)
 steps\<id>.ps1            по одному файлу на шаг
 config\sequence.json      порядок шагов (меняйте порядок/добавляйте/убирайте здесь)
 config\profile.json       параметры (значения для шагов, данные устройства), хранится в git
@@ -119,3 +119,11 @@ SID или имя. Применяется через `secedit` ([Privilege Right
 - `Req` в `Items` добавляет к строке проверки метку требования (например `[ЦПБ AU-5; Додаток 12 до Акту]`).
 - Пункт 3 (`SCENoApplyLegacyAuditPolicy`) совпадает со значением, которое ставит `audit-policy`. Это не конфликт; при откате каждого шага
   значение возвращается к тому, что было на момент его резервной копии.
+
+## Журналы событий (шаги event-log-settings и eventvwr-access)
+- `event-log-settings`: размер (КБ, кратно 64) и режим хранения (`Circular` / `AutoBackup` / `Retain`) для Application, Security, System через `EventLogConfiguration`.
+  Шаг стоит ДО `security-options`: п. 4 («остановка при невозможности записать аудит») зависит от режима журнала безопасности.
+- `eventvwr-access`: владелец и DACL для `eventvwr.exe` / `eventvwr.msc` (AU-9, AC-6(1)). Владелец ставится через `takeown /A`, DACL через `Set-Acl`; записи по SID,
+  роль `{SecurityAdmin}` берётся из `local-accounts`. Откат восстанавливает DACL из SDDL; вернуть владельца (TrustedInstaller) может только учётка с правом SeRestorePrivilege.
+- ВАЖНО после шага `user-rights`: право «Керування аудитом та журналом безпеки» (SeSecurityPrivilege) остаётся только у SecAdmin, а «Відновлення файлів» (SeRestorePrivilege) только у SysAdmin.
+  Поэтому изменения журнала безопасности нужно выполнять от имени SecAdmin.

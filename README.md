@@ -13,7 +13,7 @@ Start.cmd                 запуск
 Start-Configurator.ps1    точка входа: права администратора, загрузка lib\, главное меню
 lib\Common.ps1            вывод, лог, состояние, Invoke-Native, проверки
 lib\Wizard.ps1            ядро: загрузка шагов, Apply/Verify/Rollback, меню
-lib\Power.ps1, Accounts.ps1, RestorePoint.ps1, SecPol.ps1, AuditPolicy.ps1, UserRights.ps1, Registry.ps1, SecurityOptions.ps1, FileSecurity.ps1, EventLog.ps1  помощники по областям (далее Registry, Services, Lgpo, ...)
+lib\Power.ps1, Accounts.ps1, RestorePoint.ps1, SecPol.ps1, AuditPolicy.ps1, UserRights.ps1, Registry.ps1, SecurityOptions.ps1, FileSecurity.ps1, EventLog.ps1, Srp.ps1  помощники по областям (далее Registry, Services, Lgpo, ...)
 steps\<id>.ps1            по одному файлу на шаг
 config\sequence.json      порядок шагов (меняйте порядок/добавляйте/убирайте здесь)
 config\profile.json       параметры (значения для шагов, данные устройства), хранится в git
@@ -127,3 +127,9 @@ SID или имя. Применяется через `secedit` ([Privilege Right
   роль `{SecurityAdmin}` берётся из `local-accounts`. Откат восстанавливает DACL из SDDL; вернуть владельца (TrustedInstaller) может только учётка с правом SeRestorePrivilege.
 - ВАЖНО после шага `user-rights`: право «Керування аудитом та журналом безпеки» (SeSecurityPrivilege) остаётся только у SecAdmin, а «Відновлення файлів» (SeRestorePrivilege) только у SysAdmin.
   Поэтому изменения журнала безопасности нужно выполнять от имени SecAdmin.
+
+## Политика ограниченного использования программ (шаг software-restriction)
+Хранится в реестре (`...\\Policies\\Microsoft\\Windows\\Safer\\CodeIdentifiers`). Правила пути заменяются целиком; хеш-правила и правила сертификатов не затрагиваются.
+Резервная копия всей ветви (плоским списком) лежит в `state.json`; откат восстанавливает её точно. Тип значения `ItemData` правил: REG_EXPAND_SZ.
+Применяется ко всем, кроме локальных администраторов (`Enforcement.Users = AllExceptAdministrators`), поэтому SecAdmin/SysAdmin ограничения не касаются.
+Для новых процессов / после повторного входа пользователя. `lib\\Registry.ps1` получил операции над ветвями (`Export-RegTree`, `Import-RegTree`, `Remove-RegKeyTree`).

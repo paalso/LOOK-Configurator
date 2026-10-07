@@ -123,7 +123,7 @@ function Initialize-Environment {
 }
 
 function Save-State {
-    $Script:State | ConvertTo-Json -Depth 10 | Set-Content -Path $Script:StatePath -Encoding UTF8
+    $Script:State | ConvertTo-Json -Depth 20 | Set-Content -Path $Script:StatePath -Encoding UTF8
 }
 
 function Get-StepState {

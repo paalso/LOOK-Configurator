@@ -313,6 +313,46 @@
         { "Principal": "All Restricted Application Packages", "Rights": "ReadAndExecute" },
         { "Principal": "{SecurityAdmin}", "Rights": "FullControl" }
       ]
+    },
+
+    // 5.1 Політика обмеженого використання програм (SRP), ЦПБ CM-11.
+    // DefaultLevel в документі не вказаний: залишено Unrestricted (значення при створенні політики). Правило 10 ("*" = Disallowed) забороняє все, чого немає у списку.
+    // Застосування (табл. 11): AppliesTo = AllExceptLibraries | AllFiles; Users = AllUsers | AllExceptAdministrators; CertificateRules = Ignore | Enforce.
+    // Рівні: Disallowed, BasicUser, Unrestricted.
+    "software-restriction": {
+      "DefaultLevel": "Unrestricted",
+      "Enforcement": {
+        "AppliesTo": "AllExceptLibraries",
+        "Users": "AllExceptAdministrators",
+        "CertificateRules": "Ignore"
+      },
+      // Призначені типи файлів: MDB і LNK видалити, OCX додати (за відсутності).
+      "DesignatedFileTypes": { "Remove": ["MDB", "LNK"], "Add": ["OCX"] },
+      // Довірені видавці (рисунок 56): AllowManagement = EndUsers (усі адміністратори і користувачі) | LocalAdministrators | EnterpriseAdministrators.
+      // ПЕРЕВІРТЕ відповідність рисунку 56 у вікні Trusted Publishers Properties.
+      "TrustedPublishers": { "AllowManagement": "EndUsers", "CheckPublisherRevocation": true, "CheckTimestampRevocation": false },
+      "Rules": [
+        // 1. Каталог Windows
+        { "Path": "%HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\SystemRoot%", "Level": "Unrestricted" },
+        // 2.
+        { "Path": "%HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\SystemRoot%\\*.exe", "Level": "Unrestricted" },
+        // 3.
+        { "Path": "%HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\SystemRoot%\\System32\\*.exe", "Level": "Unrestricted" },
+        // 4. УВАГА: у документі ...\Windows NT\CurrentVersion\ProgramFilesDir. У стандартній Windows значення ProgramFilesDir лежить в ...\Windows\CurrentVersion (без NT); перевірка покаже довідковий рядок. Правила 8-9 перекривають Program Files у будь-якому випадку.
+        { "Path": "%HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProgramFilesDir%", "Level": "Unrestricted" },
+        // 5.
+        { "Path": "*.lnk", "Level": "Unrestricted" },
+        // 6.
+        { "Path": "*.vbs", "Level": "Disallowed" },
+        // 7.
+        { "Path": "Logon.bat", "Level": "Unrestricted" },
+        // 8.
+        { "Path": "*\\Program Files", "Level": "Unrestricted" },
+        // 9.
+        { "Path": "*\\Program Files (x86)", "Level": "Unrestricted" },
+        // 10. Усе інше заборонено
+        { "Path": "*", "Level": "Disallowed" }
+      ]
     }
   }
 }

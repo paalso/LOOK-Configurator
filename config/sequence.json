@@ -8,6 +8,7 @@
     "user-rights",
     "event-log-settings",
     "security-options",
-    "eventvwr-access"
+    "eventvwr-access",
+    "software-restriction"
   ]
 }

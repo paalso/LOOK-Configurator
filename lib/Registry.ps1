@@ -57,3 +57,42 @@ function Remove-RegValue {
     $key = (Get-RegistryBase $loc.Hive).OpenSubKey($loc.SubKey, $true)
     if ($key) { try { $key.DeleteValue($Name, $false) } finally { $key.Close() } }
 }
+
+function Get-RegFirstMissingKey {
+    # Самый верхний НЕсуществующий ключ цепочки (или $null, если весь путь есть). Нужен, чтобы при откате
+    # убрать пустые ключи, созданные при записи значения.
+    param([Parameter(Mandatory)][string]$Path)
+    $loc = ConvertTo-RegistryLocation $Path
+    $base = Get-RegistryBase $loc.Hive
+    $prefix = if ($loc.Hive -eq 'LocalMachine') { 'HKLM:\' } else { 'HKCU:\' }
+    $cur = ''
+    foreach ($part in ($loc.SubKey -split '\\')) {
+        $cur = if ($cur) { "$cur\$part" } else { $part }
+        $k = $base.OpenSubKey($cur)
+        if (-not $k) { return "$prefix$cur" }
+        $k.Close()
+    }
+    $null
+}
+
+function Test-RegKeyTreeEmpty {
+    param($Key)
+    if ($Key.ValueCount -gt 0) { return $false }
+    foreach ($n in $Key.GetSubKeyNames()) {
+        $sk = $Key.OpenSubKey($n)
+        try { if (-not (Test-RegKeyTreeEmpty $sk)) { return $false } } finally { $sk.Close() }
+    }
+    $true
+}
+
+function Remove-RegKeyIfEmpty {
+    # Удаляет ключ вместе с подветвью, только если в ней нет ни одного значения.
+    param([Parameter(Mandatory)][string]$Path)
+    $loc = ConvertTo-RegistryLocation $Path
+    $base = Get-RegistryBase $loc.Hive
+    $key = $base.OpenSubKey($loc.SubKey)
+    if (-not $key) { return }
+    $empty = $false
+    try { $empty = Test-RegKeyTreeEmpty $key } finally { $key.Close() }
+    if ($empty) { $base.DeleteSubKeyTree($loc.SubKey, $false) }
+}

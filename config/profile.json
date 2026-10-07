@@ -153,10 +153,45 @@
       }
     },
 
-    // 3.2.3 Параметри безпеки (табл. 7, пункти 12-42). Значения: числа/строки как они хранятся в реестре (см. пояснения).
-    // Пункти 1-11 таблиці додаються так само: рядок в Items шага security-options + значення тут.
+    // 3.2.3 Параметри безпеки (табл. 7, пункти 1-42). Значения: числа/строки как они хранятся в реестре (см. пояснения).
+    // Новий параметр додається так: рядок в Items шага security-options + значення тут.
     "security-options": {
+      // Пункти 9-11 (Domain controller): застосовуються завжди (для перевірок). false = пропускати на машині, що не є контролером домену.
+      "ApplyDomainControllerItems": true,
       "Values": {
+        // 1. Accounts: Rename administrator account
+        //     РЕКОМЕНДОВАНО: нове ім'я вбудованого адміністратора (RID 500). Умовне ім'я-заглушка (не належить реальному користувачеві): замініть за потреби.
+        "RenameAdministrator": "John Doe",
+        // 2. Accounts: Rename guest account
+        //     РЕКОМЕНДОВАНО: нове ім'я вбудованого гостя (RID 501). Умовне ім'я-заглушка (не належить реальному користувачеві): замініть за потреби.
+        "RenameGuest": "Tirion Lannister",
+        // 3. Audit: Force audit policy subcategory settings to override audit policy category settings
+        //     1 = Ввімкнено (те саме значення виставляє крок audit-policy)
+        "ForceAuditSubcategoryOverride": 1,
+        // 4. Audit: Shut down system immediately if unable to log security audits
+        //     1 = Ввімкнено. ЦПБ AU-5. УВАГА: див. розмір/режим журналу безпеки (розділ 4.2)
+        "CrashOnAuditFail": 1,
+        // 5. Devices: Allowed to format and eject removable media
+        //     рядок: 0 = Administrators, 1 = Administrators і Power Users, 2 = Administrators і Interactive Users
+        "AllocateDASD": "0",
+        // 6. Devices: Prevent users from installing printer drivers
+        //     1 = Ввімкнено
+        "AddPrinterDrivers": 1,
+        // 7. Devices: Restrict CD-ROM access to locally logged-on user only
+        //     рядок: 0 = Вимкнено
+        "AllocateCDRoms": "0",
+        // 8. Devices: Restrict floppy access to locally logged-on user only
+        //     рядок: 0 = Вимкнено
+        "AllocateFloppies": "0",
+        // 9. Domain controller: Allow server operators to schedule tasks
+        //     0 = Вимкнено. Лише для контролера домену
+        "DC_SubmitControl": 0,
+        // 10. Domain controller: LDAP server signing requirements
+        //     1 = None (2 = Require signing). Лише для контролера домену
+        "DC_LDAPServerIntegrity": 1,
+        // 11. Domain controller: Refuse machine account password changes
+        //     0 = Вимкнено. Лише для контролера домену
+        "DC_RefusePasswordChange": 0,
         // 12. Domain member: Digitally encrypt or sign secure channel data (always)
         //     0 = Вимкнено
         "DomainMember_RequireSignOrSeal": 0,

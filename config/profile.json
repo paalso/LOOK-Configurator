@@ -1,14 +1,19 @@
 ﻿{
-  "device": {
-    "name": ""
-  },
+  // Профиль ЛООК: значения по умолчанию (хранится в git). Реальные пароли и т.п. переопределяйте в config/profile.local.json.
+  // Строки, начинающиеся с //, считаются комментариями.
+  "device": { "name": "" },
+
   "steps": {
+    // 1.4 Ініціювання блокування пристрою (хвилини)
     "power-lock": {
       "DisplayOffAcMinutes": 10,
       "DisplayOffDcMinutes": 10,
       "SleepAfterAcMinutes": 10,
       "SleepAfterDcMinutes": 10
     },
+
+    // 2.1-2.2 Облікові записи. Role: SecurityAdmin / SystemAdmin (на них ссылается шаг user-rights).
+    // ExistingAccount: adopt | skip | ask (что делать с учётками, существовавшими до мастера).
     "local-accounts": {
       "UsersRoot": "D:\\Users",
       "ExistingAccount": "ask",
@@ -22,7 +27,8 @@
           "PasswordNeverExpires": true,
           "FullName": "Security Administrator",
           "Description": "Адміністратор безпеки",
-          "HomeFolder": true
+          "HomeFolder": true,
+          "Role": "SecurityAdmin"
         },
         {
           "Name": "SysAdmin",
@@ -33,7 +39,8 @@
           "PasswordNeverExpires": true,
           "FullName": "System Administrator",
           "Description": "Системний адміністратор",
-          "HomeFolder": true
+          "HomeFolder": true,
+          "Role": "SystemAdmin"
         },
         {
           "Name": "User1",
@@ -48,6 +55,8 @@
         }
       ]
     },
+
+    // 2.6 Точка відновлення
     "restore-point": {
       "Drive": "C:",
       "MaxSize": "15GB",
@@ -55,6 +64,8 @@
       "AskForName": true,
       "MinRestorePoints": 1
     },
+
+    // 3.1.1 Політика паролів (табл. 3)
     "password-policy": {
       "PasswordHistorySize": 24,
       "MaximumPasswordAge": 31,
@@ -63,6 +74,8 @@
       "PasswordComplexity": 1,
       "ClearTextPassword": 0
     },
+
+    // 3.2.1 Політика аудиту (табл. 5); Overrides: { "{GUID}": { "Success": false, "Failure": false } }
     "audit-policy": {
       "Default": {
         "Success": true,
@@ -70,6 +83,174 @@
       },
       "Overrides": {},
       "ForceSubcategoryOverride": true
+    },
+
+    // 3.2.2 Призначення прав користувачів (табл. 6)
+    // Принципалы: Administrators, Users, Guests, Local Service, Network Service, Service, Everyone, Anonymous Logon,
+    // {SecurityAdmin} / {SystemAdmin} (роль в local-accounts), SID или имя. Пустой список [] = «Ніхто».
+    "user-rights": {
+      "Rights": {
+        // 1. Access this computer from the network (Доступ до комп’ютеру з мережі)
+        "SeNetworkLogonRight": [],
+        // 2. Adjust memory quotas for a process (Налаштування квот пам’яті для процесу)
+        "SeIncreaseQuotaPrivilege": ["Administrators", "Local Service"],
+        // 3. Allow log on locally (Локальний вхід в систему)
+        "SeInteractiveLogonRight": ["Administrators", "Users"],
+        // 4. Allow log on through Remote Desktop Services (Вхід через службу віддалених робочих столів)
+        "SeRemoteInteractiveLogonRight": [],
+        // 5. Back up files and directories (Архівування файлів і каталогів)
+        "SeBackupPrivilege": ["Administrators"],
+        // 6. Bypass traverse checking (Обхід перехресної перевірки)
+        "SeChangeNotifyPrivilege": ["Administrators", "Users", "Local Service", "Network Service"],
+        // 7. Change the system time (Зміна системного часу)
+        "SeSystemtimePrivilege": ["Administrators"],
+        // 8. Change the time zone (Зміна часового поясу)
+        "SeTimeZonePrivilege": ["Administrators"],
+        // 9. Create a pagefile (Створення файлу підкачки)
+        "SeCreatePagefilePrivilege": ["Administrators"],
+        // 10. Create global objects (Створення глобальних об’єктів)
+        "SeCreateGlobalPrivilege": ["Administrators", "Local Service", "Network Service", "Service"],
+        // 11. Create symbolic links (Створення символічних посилань)
+        "SeCreateSymbolicLinkPrivilege": [],
+        // 12. Debug programs (Відладка програм)
+        "SeDebugPrivilege": [],
+        // 13. Deny access to this computer from the network (Відмова в доступі до комп’ютера з мережі)
+        "SeDenyNetworkLogonRight": ["Anonymous Logon", "Everyone", "Guests"],
+        // 14. Deny log on as a batch job (Відмова у вході в якості пакетного завдання)
+        "SeDenyBatchLogonRight": ["Anonymous Logon", "Guests"],
+        // 15. Deny log on as a service (Відмова у вході в якості служби)
+        "SeDenyServiceLogonRight": ["Anonymous Logon", "Guests"],
+        // 16. Deny log on locally (Заборонити локальний вхід)
+        "SeDenyInteractiveLogonRight": ["Anonymous Logon", "Guests"],
+        // 17. Deny log on through Remote Desktop Services (Заборонити вхід через службу терміналів)
+        "SeDenyRemoteInteractiveLogonRight": ["Anonymous Logon", "Everyone", "Guests"],
+        // 18. Force shutdown from a remote system (Примусове віддалене завершення роботи)
+        "SeRemoteShutdownPrivilege": [],
+        // 19. Generate security audits (Ведення аудиту безпеки)
+        "SeAuditPrivilege": ["Local Service", "Network Service"],
+        // 20. Impersonate a client after authentication (Видавати себе за клієнта після автентифікації)
+        "SeImpersonatePrivilege": ["Administrators", "Local Service", "Network Service", "Service"],
+        // 21. Increase a process working set (Збільшення робочого набору процесу)
+        "SeIncreaseWorkingSetPrivilege": ["Administrators", "Local Service"],
+        // 22. Load and unload device drivers (Завантаження і вивантаження драйверів пристроїв)
+        "SeLoadDriverPrivilege": ["{SecurityAdmin}"],
+        // 23. Log on as a batch job (Вхід в якості пакетного завдання)
+        "SeBatchLogonRight": [],
+        // 24. Log on as a service (Вхід в якості служби)
+        "SeServiceLogonRight": [],
+        // 25. Manage auditing and security log (Керування аудитом та журналом безпеки)
+        "SeSecurityPrivilege": ["{SecurityAdmin}"],
+        // 26. Perform volume maintenance tasks (Виконання задач по обслуговуванню томів)
+        "SeManageVolumePrivilege": ["{SystemAdmin}"],
+        // 27. Profile system performance (Продуктивність системи профілю)
+        "SeSystemProfilePrivilege": ["Administrators"],
+        // 28. Replace a process level token (Заміна маркера рівня процесу)
+        "SeAssignPrimaryTokenPrivilege": ["Local Service", "Network Service"],
+        // 29. Restore files and directories (Відновлення файлів і каталогів)
+        "SeRestorePrivilege": ["{SystemAdmin}"],
+        // 30. Shut down the system (Завершення роботи системи)
+        "SeShutdownPrivilege": ["Administrators", "Users"]
+      }
+    },
+
+    // 3.2.3 Параметри безпеки (табл. 7, пункти 12-42). Значения: числа/строки как они хранятся в реестре (см. пояснения).
+    // Пункти 1-11 таблиці додаються так само: рядок в Items шага security-options + значення тут.
+    "security-options": {
+      "Values": {
+        // 12. Domain member: Digitally encrypt or sign secure channel data (always)
+        //     0 = Вимкнено
+        "DomainMember_RequireSignOrSeal": 0,
+        // 13. Domain member: Digitally encrypt secure channel data (when possible)
+        //     0 = Вимкнено
+        "DomainMember_SealSecureChannel": 0,
+        // 14. Domain member: Digitally sign secure channel data (when possible)
+        //     0 = Вимкнено
+        "DomainMember_SignSecureChannel": 0,
+        // 15. Domain member: Require strong (Windows 2000 or later) session key
+        //     0 = Вимкнено
+        "DomainMember_RequireStrongKey": 0,
+        // 16. Interactive logon: Display user information when the session is locked
+        //     2 = Не відображати інформацію про користувача (1 = лише ім'я, 3 = домен та ім'я). ЦПБ ІА-6
+        "DontDisplayLockedUserId": 2,
+        // 17. Interactive logon: Do not require CTRL+ALT+DEL
+        //     0 = Вимкнено (CTRL+ALT+DEL потрібен)
+        "DisableCAD": 0,
+        // 18. Interactive logon: Do not display last signed-in
+        //     1 = Ввімкнено
+        "DontDisplayLastUserName": 1,
+        // 19. Interactive logon: Machine inactivity limit
+        //     секунди
+        "InactivityTimeoutSecs": 600,
+        // 20. Interactive logon: Message text for users attempting to log on
+        //     ЦПБ AC-8. ПЕРЕВІРТЕ текст за оригіналом документа
+        "LegalNoticeText": "Вхід тільки для авторизованих користувачів. Особи, які здійснюють спроби несанкціонованого доступу, порушують законодавство України",
+        // 21. Interactive logon: Message title for users attempting to log on
+        //     ЦПБ AC-8. ПЕРЕВІРТЕ заголовок за оригіналом документа
+        "LegalNoticeCaption": "ПРОДОВЖЕННЯ СПРОБ БЕЗ НАЛЕЖНОЇ АВТОРИЗАЦІЇ Є ЗЛОЧИНОМ",
+        // 22. Interactive logon: Number of previous logons to cache
+        //     рядок (REG_SZ), не число
+        "CachedLogonsCount": "0",
+        // 23. Microsoft network client: Digitally sign communications (always)
+        //     0 = Вимкнено
+        "Client_RequireSecuritySignature": 0,
+        // 24. Microsoft network client: Digitally sign communications (if server agrees)
+        //     0 = Вимкнено
+        "Client_EnableSecuritySignature": 0,
+        // 25. Microsoft network server: Amount of idle time required before suspending session
+        //     хвилини
+        "Server_AutoDisconnect": 10,
+        // 26. Microsoft network server: Digitally sign communications (always)
+        //     0 = Вимкнено
+        "Server_RequireSecuritySignature": 0,
+        // 27. Microsoft network server: Disconnect clients when logon hours expire
+        //     0 = Вимкнено
+        "Server_EnableForcedLogOff": 0,
+        // 28. Network access: Do not allow anonymous enumeration of SAM accounts and shares
+        //     1 = Ввімкнено
+        "RestrictAnonymous": 1,
+        // 29. Network access: Remotely accessible registry paths
+        //     [] = None (Ні)
+        "AllowedExactPaths": [],
+        // 30. Network access: Remotely accessible registry paths and sub-paths
+        //     [] = None (Ні)
+        "AllowedPaths": [],
+        // 31. Network security: Force logoff when logon hours expire
+        //     1 = Ввімкнено (зберігається в SAM, застосовується через secedit)
+        "ForceLogoffWhenHourExpire": 1,
+        // 32. Network security: LDAP client signing requirements
+        //     0 = None (1 = Negotiate signing, 2 = Require signing)
+        "LDAPClientIntegrity": 0,
+        // 33. Shutdown: Allow system to be shut down without having to log on
+        //     0 = Вимкнено
+        "ShutdownWithoutLogon": 0,
+        // 34. Shutdown: Clear virtual memory pagefile
+        //     1 = Ввімкнено
+        "ClearPageFileAtShutdown": 1,
+        // 35. System cryptography: Force strong key protection for user keys stored on the computer
+        //     2 = Пароль при кожному використанні ключа (1 = запит при першому використанні)
+        "ForceKeyProtection": 2,
+        // 36. User Account Control: Switch to the secure desktop when prompting for elevation
+        //     0 = Вимкнено
+        "PromptOnSecureDesktop": 0,
+        // 37. User Account Control: Behavior of the elevation prompt for administrators in Admin Approval Mode
+        //     1 = Запит облікових даних (secure desktop); 2 = згода (secure desktop); 3 = облікові дані; 4 = згода; 5 = згода для не-Windows (типово)
+        "ConsentPromptBehaviorAdmin": 1,
+        // 38. User Account Control: Behavior of the elevation prompt for standard users
+        //     1 = Запит облікових даних (secure desktop); 3 = облікові дані; 0 = автоматично відхиляти
+        "ConsentPromptBehaviorUser": 1,
+        // 39. User Account Control: Only elevate UIAccess applications that are installed in secure locations
+        //     1 = Ввімкнено
+        "EnableSecureUIAPaths": 1,
+        // 40. User Account Control: Only elevate executables that are signed and validated
+        //     0 = Вимкнено
+        "ValidateAdminCodeSignatures": 0,
+        // 41. User Account Control: Allow UIAccess applications to prompt for elevation without using the secure desktop
+        //     0 = Вимкнено
+        "EnableUIADesktopToggle": 0,
+        // 42. User Account Control: Admin Approval Mode for the Built-in Administrator account
+        //     0 = Вимкнено
+        "FilterAdministratorToken": 0
+      }
     }
   }
 }

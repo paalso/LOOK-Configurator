@@ -4,7 +4,7 @@ function Get-Steps {
     # Элемент sequence: строка "id" ИЛИ объект { "id": "...", "use": "<файл шага>", "title": "..." }.
     # Объект позволяет вставить один и тот же шаг несколько раз (например, restore-point: "clean", "base policy").
     $seqPath = Join-Path $Script:Root 'config\sequence.json'
-    $sequence = @((Get-Content -Path $seqPath -Raw -Encoding UTF8 | ConvertFrom-Json).sequence)
+    $sequence = @((Read-JsonFile -Path $seqPath).sequence)
     $steps = @()
     $seen = @{}
     $usedFiles = @{}

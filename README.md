@@ -13,7 +13,7 @@ Start.cmd                 запуск
 Start-Configurator.ps1    точка входа: права администратора, загрузка lib\, главное меню
 lib\Common.ps1            вывод, лог, состояние, Invoke-Native, проверки
 lib\Wizard.ps1            ядро: загрузка шагов, Apply/Verify/Rollback, меню
-lib\Power.ps1, Accounts.ps1, RestorePoint.ps1, SecPol.ps1, AuditPolicy.ps1  помощники по областям (далее Registry, Services, Lgpo, ...)
+lib\Power.ps1, Accounts.ps1, RestorePoint.ps1, SecPol.ps1, AuditPolicy.ps1, UserRights.ps1, Registry.ps1, SecurityOptions.ps1  помощники по областям (далее Registry, Services, Lgpo, ...)
 steps\<id>.ps1            по одному файлу на шаг
 config\sequence.json      порядок шагов (меняйте порядок/добавляйте/убирайте здесь)
 config\profile.json       параметры (значения для шагов, данные устройства), хранится в git
@@ -91,3 +91,20 @@ state\                    (в .gitignore) state.json, резервные зна�
                   "Overrides": { "{0CCE9225-69AE-11D9-BED3-505054503030}": { "Success": false, "Failure": false } } }
 ```
 Список подкатегорий и их GUID: `auditpol /list /subcategory:* /v`. Откат делает `auditpol /restore` из копии в `state\backups\*.csv`.
+
+## Комментарии в JSON
+В `profile.json`, `profile.local.json` и `sequence.json` строки, начинающиеся с `//`, игнорируются. Комментарий в конце строки после значения не поддерживается.
+
+## Права пользователей (шаг user-rights)
+`steps -> user-rights -> Rights`: ключ = константа права (`SeNetworkLogonRight`...), значение = список принципалов; `[]` = «Ніхто».
+Принципалы: известные имена, `{SecurityAdmin}` / `{SystemAdmin}` (учётка с таким `Role` в `local-accounts`; имена админов не фиксированы),
+SID или имя. Применяется через `secedit` ([Privilege Rights]); меняются только перечисленные права. Есть защита от самоблокировки
+(пустой `SeInteractiveLogonRight`, запрет локального входа для Administrators/Users/Everyone). Если у вас свой `profile.local.json`
+с `Accounts`, добавьте туда поле `Role` (массив заменяется целиком).
+
+## Параметры безопасности (шаг security-options)
+`steps -> security-options -> Values`: ключ = Id параметра (список в `Items` файла шага), значение = то, что хранится в реестре
+(число для REG_DWORD, строка для REG_SZ, массив для REG_MULTI_SZ; `[]` = пустой список, «None»). Пояснения к значениям (что означает 0/1/2) в комментариях профиля.
+Реестровые параметры пишутся напрямую через `lib\Registry.ps1` (точный тип значения), проверка читает фактическое значение.
+Откат возвращает прежнее значение и тип либо удаляет значение, если его не было. Параметры из `[System Access]` (Kind = SystemAccess)
+идут через secedit. Новый параметр: строка в `Items` + значение в `Values`. `lib\Registry.ps1` общий для будущих шагов (раздел 6.3 и др.).

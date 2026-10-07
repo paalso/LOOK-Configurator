@@ -72,6 +72,13 @@ function ConvertTo-Hashtable {
     $InputObject
 }
 
+function Read-JsonFile {
+    # JSON с комментариями: строки, начинающиеся с //, отбрасываются (число строк сохраняется для сообщений об ошибках).
+    param([Parameter(Mandatory)][string]$Path)
+    $raw = Get-Content -Path $Path -Raw -Encoding UTF8
+    [regex]::Replace($raw, '(?m)^[ \t]*//.*$', '') | ConvertFrom-Json
+}
+
 function Merge-Hashtable {
     # Глубокое слияние: словари объединяются, массивы и скаляры заменяются целиком.
     param([hashtable]$Base, [hashtable]$Override)
@@ -96,11 +103,11 @@ function Initialize-Environment {
     $Script:StatePath = Join-Path $Script:StateDir 'state.json'
 
     $profilePath = Join-Path $Script:Root 'config\profile.json'
-    $Script:LookProfile = ConvertTo-Hashtable (Get-Content -Path $profilePath -Raw -Encoding UTF8 | ConvertFrom-Json)
+    $Script:LookProfile = ConvertTo-Hashtable (Read-JsonFile -Path $profilePath)
     # Локальные переопределения (пароли, имя устройства): не коммитятся в git.
     $localPath = Join-Path $Script:Root 'config\profile.local.json'
     if (Test-Path $localPath) {
-        $local = ConvertTo-Hashtable (Get-Content -Path $localPath -Raw -Encoding UTF8 | ConvertFrom-Json)
+        $local = ConvertTo-Hashtable (Read-JsonFile -Path $localPath)
         $Script:LookProfile = Merge-Hashtable $Script:LookProfile $local
     }
 

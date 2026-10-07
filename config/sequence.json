@@ -4,6 +4,8 @@
     "local-accounts",
     "restore-point",
     "password-policy",
-    "audit-policy"
+    "audit-policy",
+    "user-rights",
+    "security-options"
   ]
 }

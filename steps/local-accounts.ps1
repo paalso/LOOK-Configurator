@@ -6,7 +6,7 @@
     Id          = 'local-accounts'
     Title       = 'Облікові записи адміністраторів і користувачів, особисті папки'
     Reference   = 'ЦПБ AC-5; розділи 2.1-2.2, табл. 2'
-    Description = 'Створення облікових записів із профілю, членство в групах, особисті папки D:\Users\<ім''я> з правами за табл. 2. Існуючі облікові записи обробляються за політикою ExistingAccount.'
+    Description = 'Створення облікових записів із профілю, членство в групах, особисті папки D:\Users\<ім''я> з правами за табл. 2, профілі користувачів (нові теж) на тому ж диску (RelocateProfiles). Існуючі облікові записи обробляються за політикою ExistingAccount.'
     Reversible  = $true
 
     Backup      = {
@@ -14,6 +14,7 @@
         Test-AccountConfig $ctx.Params
         $root = Get-UsersRoot $ctx.Params
         $saved = @{ Users = @{}; Folders = @{}; RootExisted = [bool](Test-Path -LiteralPath $root) }
+        if (Test-ProfileRelocation $ctx.Params) { $saved.Profiles = Get-ProfilesDirectoryBackup $root }
         foreach ($a in @($ctx.Params.Accounts)) {
             $u = Get-LocalUser -Name $a.Name -ErrorAction SilentlyContinue
             if ($u) {
@@ -52,6 +53,7 @@
             New-Item -ItemType Directory -Path $root | Out-Null
             Write-Log "Создана корневая папка '$root'"
         }
+        if (Test-ProfileRelocation $ctx.Params) { Set-ProfilesRoot -Root $root }
         foreach ($a in @($ctx.Params.Accounts)) {
             $decision = Resolve-AccountDecision -Ctx $ctx -Account $a -Root $root
             if ($decision -eq 'skip') {
@@ -62,8 +64,9 @@
             Initialize-LocalAccount -Account $a
             if (Test-AccountWantsFolder $a) {
                 $path = Get-AccountFolderPath $root $a
-                if (-not (Test-Path -LiteralPath $path)) { New-Item -ItemType Directory -Path $path | Out-Null }
                 $sid = (Get-LocalUser -Name $a.Name).SID.Value
+                if (Test-ProfileRelocation $ctx.Params) { Initialize-AccountProfile -Account $a -Path $path -Sid $sid }
+                if (-not (Test-Path -LiteralPath $path)) { New-Item -ItemType Directory -Path $path | Out-Null }
                 Set-PersonalFolderAcl -Path $path -FullControlSids (Get-PersonalFolderSids $a $sid)
                 Write-Log "Папка '$path': права установлены"
             }
@@ -74,6 +77,14 @@
         param($ctx)
         Test-AccountConfig $ctx.Params
         $root = Get-UsersRoot $ctx.Params
+        if (Test-ProfileRelocation $ctx.Params) {
+            $pd = Get-RegValueInfo -Path $Script:ProfileListKey -Name 'ProfilesDirectory'
+            New-Check 'Каталог профілів (ProfileList\ProfilesDirectory)' $root $(if ($pd.Exists) { [string]$pd.Value } else { 'не задано' }) ($pd.Exists -and (Test-SamePath ([string]$pd.Value) $root))
+            $df = Get-RegValueInfo -Path $Script:ProfileListKey -Name 'Default'
+            $dfPath = Join-Path $root 'Default'
+            $dfOk = $df.Exists -and (Test-SamePath ([string]$df.Value) $dfPath) -and (Test-Path -LiteralPath (Join-Path $dfPath 'NTUSER.DAT') -PathType Leaf)
+            New-Check 'Шаблон нового профілю (ProfileList\Default)' "$dfPath (з NTUSER.DAT)" $(if ($df.Exists) { [string]$df.Value } else { 'не задано' }) $dfOk
+        }
         foreach ($a in @($ctx.Params.Accounts)) {
             $n = $a.Name
             if ((Get-AccountDecision $ctx $a) -eq 'skip') {
@@ -101,6 +112,10 @@
 
             if (Test-AccountWantsFolder $a) {
                 $path = Get-AccountFolderPath $root $a
+                if (Test-ProfileRelocation $ctx.Params) {
+                    $reg = Get-RegisteredProfilePath $user.SID.Value
+                    New-Check "$n`: профіль користувача" $path $(if ($reg) { $reg } else { 'профіль ще не створено' }) ([bool]$reg -and (Test-SamePath $reg $path))
+                }
                 if (-not (Test-Path -LiteralPath $path)) {
                     New-Check "$n`: папка $path" 'існує' 'не знайдено' $false
                 }
@@ -124,6 +139,13 @@
             $user = Get-LocalUser -Name $a.Name -ErrorAction SilentlyContinue
             if ($user) {
                 if (-not $b.Existed) {
+                    if ($backup.Profiles) {
+                        $regPath = Get-RegisteredProfilePath $user.SID.Value
+                        if ($regPath -and (Confirm-Action "Видалити профіль '$regPath' облікового запису '$($a.Name)' разом з даними?")) {
+                            if (Remove-UserProfile -Sid $user.SID.Value) { Write-Log "Відкат: профіль '$regPath' видалено" 'WARN' }
+                            else { Write-Ui "Профіль '$regPath' видалити не вдалося: залишено." Yellow }
+                        }
+                    }
                     Remove-LocalUser -Name $a.Name
                     Write-Log "Откат: удалена учётная запись '$($a.Name)'" 'WARN'
                 }
@@ -158,6 +180,7 @@
                 else { Write-Ui "Папка '$path' не пуста: оставлена (права не откатываются)." Yellow }
             }
         }
+        if ($backup.Profiles) { Restore-ProfilesRoot -Backup $backup.Profiles -Root $root }
         if (-not $backup.RootExisted -and (Test-Path -LiteralPath $root) -and @(Get-ChildItem -LiteralPath $root -Force).Count -eq 0) {
             Remove-Item -LiteralPath $root -Force
         }

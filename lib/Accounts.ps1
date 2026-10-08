@@ -277,3 +277,137 @@ function Resolve-AccountDecision {
     Write-Log "Решение по существующей учётке '$($Account.Name)': $decision"
     $decision
 }
+
+# ---------- Профили пользователей на другом диске (ProfilesDirectory) ----------
+# Windows создаёт профиль (C:\Users\<имя>) при первом входе. Чтобы все профили, в том числе будущие, создавались на D:,
+# меняем в HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList значения ProfilesDirectory и Default (шаблон нового профиля)
+# и копируем шаблон C:\Users\Default в новую папку. Каталог Public и уже существующие профили не переносятся.
+# Профиль для новой учётки создаётся сразу (userenv!CreateProfile), иначе предварительно созданная папка D:\Users\<имя>
+# заставила бы Windows создать профиль под именем <имя>.<КОМПЬЮТЕР>.
+
+$Script:ProfileListKey = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList'
+
+function Test-ProfileRelocation {
+    param($Params)
+    -not ($Params.ContainsKey('RelocateProfiles') -and -not [bool]$Params.RelocateProfiles)
+}
+
+function Test-SamePath {
+    param([string]$A, [string]$B)
+    if (-not $A -or -not $B) { return $false }
+    $x = [Environment]::ExpandEnvironmentVariables($A).TrimEnd('\', '/')
+    $y = [Environment]::ExpandEnvironmentVariables($B).TrimEnd('\', '/')
+    $x -ieq $y
+}
+
+function Get-ProfilesDirectoryBackup {
+    param([string]$Root)
+    $pd = Get-RegValueInfo -Path $Script:ProfileListKey -Name 'ProfilesDirectory'
+    $df = Get-RegValueInfo -Path $Script:ProfileListKey -Name 'Default'
+    @{
+        ProfilesDirectory = @{ Exists = $pd.Exists; Kind = $pd.Kind; Value = $pd.Value }
+        Default           = @{ Exists = $df.Exists; Kind = $df.Kind; Value = $df.Value }
+        DefaultDirExisted = [bool](Test-Path -LiteralPath (Join-Path $Root 'Default'))
+    }
+}
+
+function Copy-DefaultProfile {
+    # Копия шаблона нового профиля (NTUSER.DAT и т.д.) с правами. Коды robocopy 0-7 = успех.
+    param([string]$Source, [string]$Destination)
+    $global:LASTEXITCODE = 0
+    $null = & robocopy.exe $Source $Destination /E /COPY:DATSOU /DCOPY:DAT /XJ /R:1 /W:1 /NFL /NDL /NJH /NJS /NP 2>&1
+    if ($LASTEXITCODE -ge 8) { throw "robocopy: не вдалося скопіювати '$Source' в '$Destination' (код $LASTEXITCODE)" }
+}
+
+function Set-ProfilesRoot {
+    param([Parameter(Mandatory)][string]$Root)
+    $curDefault = Get-RegValueInfo -Path $Script:ProfileListKey -Name 'Default'
+    $src = if ($curDefault.Exists -and $curDefault.Value) { [Environment]::ExpandEnvironmentVariables([string]$curDefault.Value) } else { Join-Path $env:SystemDrive 'Users\Default' }
+    $dst = Join-Path $Root 'Default'
+    if (-not (Test-SamePath $src $dst)) {
+        if (-not (Test-Path -LiteralPath $dst)) {
+            if (-not (Test-Path -LiteralPath $src)) { throw "Шаблон нового профілю не знайдено: $src" }
+            Copy-DefaultProfile -Source $src -Destination $dst
+            Write-Log "Шаблон нового профілю скопійовано: '$src' -> '$dst'" 'OK'
+        }
+    }
+    Set-RegValue -Path $Script:ProfileListKey -Name 'ProfilesDirectory' -Value $Root -Kind ExpandString
+    Set-RegValue -Path $Script:ProfileListKey -Name 'Default' -Value $dst -Kind ExpandString
+    Write-Log "ProfileList: ProfilesDirectory='$Root', Default='$dst'" 'OK'
+}
+
+function Restore-ProfilesRoot {
+    param($Backup, [string]$Root)
+    foreach ($n in 'ProfilesDirectory', 'Default') {
+        $o = $Backup[$n]
+        if ($o.Exists) { Set-RegValue -Path $Script:ProfileListKey -Name $n -Value $o.Value -Kind ([string]$o.Kind) }
+        else { Remove-RegValue -Path $Script:ProfileListKey -Name $n }
+    }
+    $dst = Join-Path $Root 'Default'
+    if (-not $Backup.DefaultDirExisted -and (Test-Path -LiteralPath $dst)) {
+        Remove-Item -LiteralPath $dst -Recurse -Force
+        Write-Log "Відкат: видалено копію шаблону профілю '$dst'" 'WARN'
+    }
+}
+
+function Get-RegisteredProfilePath {
+    # Путь профиля, зарегистрированный для SID (или $null, если профиля ещё нет).
+    param([string]$Sid)
+    $i = Get-RegValueInfo -Path "$Script:ProfileListKey\$Sid" -Name 'ProfileImagePath'
+    if ($i.Exists -and $i.Value) { [Environment]::ExpandEnvironmentVariables([string]$i.Value) } else { $null }
+}
+
+function Initialize-UserNative {
+    if (-not ('LookNative.UserEnv' -as [type])) {
+        Add-Type -Namespace LookNative -Name UserEnv -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("userenv.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern int CreateProfile(string pszUserSid, string pszUserName, System.Text.StringBuilder pszProfilePath, uint cchProfilePath);
+[System.Runtime.InteropServices.DllImport("userenv.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern bool DeleteProfile(string sidString, string profilePath, string computerName);
+'@
+    }
+}
+
+function New-UserProfile {
+    # Создаёт профиль без входа пользователя. Возвращает путь профиля.
+    param([Parameter(Mandatory)][string]$Sid, [Parameter(Mandatory)][string]$Name)
+    Initialize-UserNative
+    $sb = New-Object System.Text.StringBuilder 260
+    $hr = [LookNative.UserEnv]::CreateProfile($Sid, $Name, $sb, 260)
+    if ($hr -eq 0) { return $sb.ToString() }
+    if ($hr -eq -2147024713) { return (Get-RegisteredProfilePath $Sid) }    # 0x800700B7: профиль уже есть
+    throw ("CreateProfile для '{0}' завершився з HRESULT 0x{1:X8}" -f $Name, $hr)
+}
+
+function Remove-UserProfile {
+    param([Parameter(Mandatory)][string]$Sid)
+    Initialize-UserNative
+    [LookNative.UserEnv]::DeleteProfile($Sid, $null, $null)
+}
+
+function Initialize-AccountProfile {
+    # Гарантирует, что профиль учётки лежит по ожидаемому пути (на выбранном диске) и папка готова к установке прав.
+    param([hashtable]$Account, [string]$Path, [string]$Sid)
+    $reg = Get-RegisteredProfilePath $Sid
+    if ($reg) {
+        if (Test-SamePath $reg $Path) { return }
+        Write-Ui "Профіль '$($Account.Name)' вже існує в '$reg' (очікується '$Path')." Yellow
+        Write-Ui 'Перенос профілю не виконується. Можна ВИДАЛИТИ старий профіль разом з усіма даними (під цим користувачем не повинні бути виконані вхід) і створити заново на новому диску.' Yellow
+        if (-not (Confirm-Action "Видалити профіль '$reg' разом з даними і створити заново в '$Path'? Відкат цього кроку дані не поверне.")) {
+            Write-Log "'$($Account.Name)': профіль залишено в '$reg'" 'WARN'
+            return
+        }
+        if (-not (Remove-UserProfile -Sid $Sid)) { throw "Не вдалося видалити профіль '$reg' (користувач виконав вхід або профіль зайнятий?)" }
+        Write-Log "'$($Account.Name)': старий профіль '$reg' видалено" 'WARN'
+    }
+    if ((Test-Path -LiteralPath $Path) -and @(Get-ChildItem -LiteralPath $Path -Force).Count -eq 0) { Remove-Item -LiteralPath $Path -Force }
+    if (Test-Path -LiteralPath $Path) {
+        Write-Ui "Папка '$Path' вже існує і не порожня, профіль не створюється (Windows створить окремий профіль з суфіксом). Перевірте вміст." Yellow
+        return
+    }
+    $created = New-UserProfile -Sid $Sid -Name $Account.Name
+    if (-not (Test-SamePath $created $Path)) {
+        throw "Профіль '$($Account.Name)' створено в '$created', очікувалось '$Path'. Для RelocateProfiles ім'я папки (FolderName) має збігатися з іменем облікового запису."
+    }
+    Write-Log "Профіль '$($Account.Name)' створено: '$created'" 'OK'
+}

@@ -16,6 +16,9 @@
     // ExistingAccount: adopt | skip | ask (что делать с учётками, существовавшими до мастера).
     "local-accounts": {
       "UsersRoot": "D:\\Users",
+      // true = каталог профілів Windows (ProfilesDirectory) і шаблон нового профілю переносяться в UsersRoot: усі нові профілі створюються на D:.
+      // Профіль нової облікової записи створюється одразу, до встановлення прав на папку. false = лише папки в UsersRoot, профілі залишаються на C:.
+      "RelocateProfiles": true,
       "ExistingAccount": "ask",
       "Accounts": [
         {

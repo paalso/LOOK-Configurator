@@ -353,6 +353,34 @@
         // 10. Усе інше заборонено
         { "Path": "*", "Level": "Disallowed" }
       ]
+    },
+
+    // Таблиця 13. Адміністративні шаблони комп'ютера (локальний GPO: Registry.pol + gpupdate).
+    // Стани: Enabled | Disabled | NotConfigured. Параметр, якого немає у списку, не змінюється.
+    // Підпараметри: AutoPlay "All drives" = 255 (0xFF), AutoRun "Do not execute any autorun commands" = 1.
+    // У Camera та Windows Installer "Disabled" записує значення 0; в інших політиках "Disabled" = запис **del. (значення видаляється).
+    "admin-templates": {
+      "States": {
+        // 1. AutoPlay Policies
+        "autoplay-off": { "State": "Enabled", "Value": 255 },
+        "autorun-default": "Enabled",
+        // 2. Camera: Allow Use of Camera = Disabled
+        "camera-allow": "Disabled",
+        // 3. NetMeeting: Disable remote Desktop Sharing = Enabled
+        "netmeeting-rds": "Enabled",
+        // 4. OneDrive: Prevent the usage of OneDrive for file storage = Enabled
+        "onedrive-block": "Enabled",
+        // 5. Online Assistance: Turn off Active Help = Enabled
+        "online-assistance": "Enabled",
+        // 6. Windows Mobility Center: Turn off = Enabled
+        "mobility-center": "Enabled",
+        // 7. Windows Messenger: обидва = Enabled
+        "messenger-noautostart": "Enabled",
+        "messenger-norun": "Enabled",
+        // 8. Windows Installer: Prohibit rollback = Disabled; Turn off creation of System Restore checkpoints = Disabled
+        "installer-rollback": "Disabled",
+        "installer-restorepoint": "Disabled"
+      }
     }
   }
 }

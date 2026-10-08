@@ -133,3 +133,15 @@ SID или имя. Применяется через `secedit` ([Privilege Right
 Резервная копия всей ветви (плоским списком) лежит в `state.json`; откат восстанавливает её точно. Тип значения `ItemData` правил: REG_EXPAND_SZ.
 Применяется ко всем, кроме локальных администраторов (`Enforcement.Users = AllExceptAdministrators`), поэтому SecAdmin/SysAdmin ограничения не касаются.
 Для новых процессов / после повторного входа пользователя. `lib\\Registry.ps1` получил операции над ветвями (`Export-RegTree`, `Import-RegTree`, `Remove-RegKeyTree`).
+
+## Адміністративні шаблони комп'ютера (шаг admin-templates, таблиця 13)
+Значення пишуться в **локальний GPO**: `%SystemRoot%\System32\GroupPolicy\Machine\Registry.pol` (формат PReg) + `gpt.ini`, потім `gpupdate /target:computer /force`.
+Тому `gpedit.msc` показує «Увімкнено / Вимкнено», а не просто значення в реєстрі. Редагується `States` у `config/profile.json`
+(`Enabled` / `Disabled` / `NotConfigured`; для AutoPlay `{ "State": "Enabled", "Value": 255 }`). Список політик і назви параметрів реєстру - `Items` у `steps/admin-templates.ps1`.
+- «Вимкнено» для Camera і Windows Installer записує значення `0`; для інших політик «Вимкнено» = запис `**del.<ім'я>`, «Не задано» = немає запису.
+- Перевірка звіряє і `Registry.pol`, і фактичне значення реєстру, а також `gpt.ini` (Version > 0, розширення Registry підключене).
+- Якщо `gpupdate` недоступний, значення записується в реєстр напряму (у журналі WARN), політика в LGPO залишається.
+- Резервна копія: байти `Registry.pol`, текст `gpt.ini`, вихідні значення реєстру; відкат повертає все, піднімає версію `gpt.ini` і викликає `gpupdate`.
+- Якщо на машині вже є інші політики в локальному GPO, вони зберігаються: змінюються лише записи цього шагу.
+- Windows Messenger: шаблон `Messenger.admx` може бути відсутній у вашій збірці Windows 11; тоді в gpedit цих двох пунктів не буде, але значення реєстру записуються і перевіряються.
+- Рекомендація для попередніх шагів (security-options, software-restriction): вони пишуть у гілки `Policies` напряму. Після `gpupdate /force` запустіть «Перевірити всі шаги».

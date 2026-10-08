@@ -9,6 +9,7 @@
     "event-log-settings",
     "security-options",
     "eventvwr-access",
-    "software-restriction"
+    "software-restriction",
+    "admin-templates"
   ]
 }

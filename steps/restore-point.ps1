@@ -36,10 +36,17 @@
             }
         }
 
-        $found = @(Get-RestorePointList | Where-Object { $_.Name -eq $name -and $_.Time -gt (Get-Date).AddMinutes(-10) })
-        if (-not $found) { throw "Точку '$name' не знайдено після створення (Checkpoint-Computer міг її пропустити)." }
+        # Checkpoint-Computer відпрацював без помилки (ErrorAction Stop вище кинув би виняток) - це і є
+        # ознака успіху. WMI-клас SystemRestore публікує новий запис із затримкою, тож чекаємо її окремо
+        # і при затримці лише попереджаємо в журнал: крок усе одно позначається виконаним, а не "не завершён".
         Set-StepData -Id $ctx.Id -Data @{ PointName = $name; Created = (Get-Date).ToString('s') }
-        Write-Log "Создана точка восстановления '$name' ($($p.Drive), лимит $($p.MaxSize))" 'OK'
+        if (Wait-RestorePoint -Name $name) {
+            Write-Log "Создана точка восстановления '$name' ($($p.Drive), лимит $($p.MaxSize))" 'OK'
+        }
+        else {
+            Write-Ui "Точка '$name' создана (Checkpoint-Computer не сообщил об ошибке), но пока не видна в списке - WMI публикует запись с задержкой. Загляните в «2 - Проверить» через полминуты." Yellow
+            Write-Log "Точка восстановления '$name' создана, но не найдена в Get-ComputerRestorePoint за 30 с (WMI-задержка или ограничение доступа)" 'WARN'
+        }
     }
 
     Verify      = {

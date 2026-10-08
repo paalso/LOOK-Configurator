@@ -90,7 +90,12 @@ function Set-ShadowStorageLimit {
 }
 
 function Get-RestorePointList {
-    $raw = @(Get-ComputerRestorePoint -ErrorAction SilentlyContinue)
+    # Get-ComputerRestorePoint обращается к WMI-класу SystemRestore: сразу после Checkpoint-Computer
+    # відповідь іноді ще не оновлена (провайдер публікує запис з невеликою затримкою), а помилка WMI
+    # раніше глушилась -ErrorAction SilentlyContinue і крок виглядав так, ніби перевірка нічого не робить.
+    $raw = $null
+    try { $raw = @(Get-ComputerRestorePoint -ErrorAction Stop) }
+    catch { Write-Log "Get-ComputerRestorePoint: $($_.Exception.Message)" 'WARN'; $raw = @() }
     foreach ($p in $raw) {
         $t = $p.CreationTime
         if ($t -isnot [datetime]) {
@@ -116,4 +121,18 @@ function New-SystemRestorePoint {
         if ($null -ne $old) { Set-ItemProperty -Path $key -Name $prop -Value $old -Type DWord -Force }
         else { Remove-ItemProperty -Path $key -Name $prop -ErrorAction SilentlyContinue }
     }
+}
+
+function Wait-RestorePoint {
+    # Checkpoint-Computer успешно завершился, але WMI-клас SystemRestore публікує новий запис із невеликою
+    # затримкою. Чекаємо до $TimeoutSeconds, а не вважаємо це помилкою створення точки.
+    param([Parameter(Mandatory)][string]$Name, [int]$TimeoutSeconds = 30)
+    $since = (Get-Date).AddMinutes(-10)
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        $found = @(Get-RestorePointList | Where-Object { $_.Name -eq $Name -and $_.Time -gt $since })
+        if ($found) { return $true }
+        Start-Sleep -Milliseconds 1000
+    } while ((Get-Date) -lt $deadline)
+    $false
 }

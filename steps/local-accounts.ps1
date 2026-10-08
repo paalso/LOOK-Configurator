@@ -6,7 +6,7 @@
     Id          = 'local-accounts'
     Title       = 'Облікові записи адміністраторів і користувачів, особисті папки'
     Reference   = 'ЦПБ AC-5; розділи 2.1-2.2, табл. 2'
-    Description = 'Створення облікових записів із профілю, членство в групах, особисті папки D:\Users\<ім''я> з правами за табл. 2, профілі користувачів (нові теж) на тому ж диску (RelocateProfiles). Існуючі облікові записи обробляються за політикою ExistingAccount.'
+    Description = 'Створення облікових записів із профілю, членство в групах, каталог профілів на тому ж диску (RelocateProfiles; D:\Users\<ім''я> створює сама Windows при першому вході). Без RelocateProfiles - окрема особиста папка з правами за табл. 2. Існуючі облікові записи обробляються за політикою ExistingAccount.'
     Reversible  = $true
 
     Backup      = {
@@ -63,12 +63,18 @@
             }
             Initialize-LocalAccount -Account $a
             if (Test-AccountWantsFolder $a) {
-                $path = Get-AccountFolderPath $root $a
-                $sid = (Get-LocalUser -Name $a.Name).SID.Value
-                if (Test-ProfileRelocation $ctx.Params) { Initialize-AccountProfile -Account $a -Path $path -Sid $sid }
-                if (-not (Test-Path -LiteralPath $path)) { New-Item -ItemType Directory -Path $path | Out-Null }
-                Set-PersonalFolderAcl -Path $path -FullControlSids (Get-PersonalFolderSids $a $sid)
-                Write-Log "Папка '$path': права установлены"
+                if (Test-ProfileRelocation $ctx.Params) {
+                    # Профіль (саму папку D:\Users\<ім'я> і права на неї) створює Windows при першому вході.
+                    # Мастер тут нічого не створює і не чіпає: саме спроба підготувати цю папку заздалегідь
+                    # ламала вхід (тимчасовий профіль TEMP). Verify лише повідомляє про стан.
+                }
+                else {
+                    $path = Get-AccountFolderPath $root $a
+                    $sid = (Get-LocalUser -Name $a.Name).SID.Value
+                    if (-not (Test-Path -LiteralPath $path)) { New-Item -ItemType Directory -Path $path | Out-Null }
+                    Set-PersonalFolderAcl -Path $path -FullControlSids (Get-PersonalFolderSids $a $sid)
+                    Write-Log "Папка '$path': права установлены"
+                }
             }
         }
     }
@@ -113,10 +119,17 @@
             if (Test-AccountWantsFolder $a) {
                 $path = Get-AccountFolderPath $root $a
                 if (Test-ProfileRelocation $ctx.Params) {
+                    # Мастер папку не створює - вона з'явиться після першого входу користувача. Поки входу не було,
+                    # це не помилка (довідково); якщо профіль вже зареєстрований, звіряємо лише шлях (чи справді на D:).
                     $reg = Get-RegisteredProfilePath $user.SID.Value
-                    New-Check "$n`: профіль користувача" $path $(if ($reg) { $reg } else { 'профіль ще не створено' }) ([bool]$reg -and (Test-SamePath $reg $path))
+                    if (-not $reg) {
+                        New-Check "$n`: профіль користувача (довідково)" $path 'ще не виконано вхід: Windows створить профіль автоматично' $true
+                    }
+                    else {
+                        New-Check "$n`: профіль користувача" $path $reg (Test-SamePath $reg $path)
+                    }
                 }
-                if (-not (Test-Path -LiteralPath $path)) {
+                elseif (-not (Test-Path -LiteralPath $path)) {
                     New-Check "$n`: папка $path" 'існує' 'не знайдено' $false
                 }
                 else {

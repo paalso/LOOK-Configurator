@@ -282,8 +282,12 @@ function Resolve-AccountDecision {
 # Windows создаёт профиль (C:\Users\<имя>) при первом входе. Чтобы все профили, в том числе будущие, создавались на D:,
 # меняем в HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList значения ProfilesDirectory и Default (шаблон нового профиля)
 # и копируем шаблон C:\Users\Default в новую папку. Каталог Public и уже существующие профили не переносятся.
-# Профиль для новой учётки создаётся сразу (userenv!CreateProfile), иначе предварительно созданная папка D:\Users\<имя>
-# заставила бы Windows создать профиль под именем <имя>.<КОМПЬЮТЕР>.
+# ВАЖНО: папка профиля (D:\Users\<имя>) мастером НЕ создаётся и права на неё НЕ выставляются - это делает сама
+# Windows при первом входе пользователя. Более ранняя версия пыталась создавать профиль заранее через
+# userenv!CreateProfile и сразу назначать права (табл. 2) - из-за этого Windows при входе не узнавала уже
+# существующую папку как "свой" профиль и создавала временный (TEMP, TEMP.<КОМПЬЮТЕР>, TEMP.<КОМПЬЮТЕР>.000 - именно
+# это видно в проводнике, когда профиль ушёл во временный). Поэтому до первого входа мастер только готовит каталог
+# ProfilesDirectory\Default (шаблон), а саму папку конкретного пользователя не трогает.
 
 $Script:ProfileListKey = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList'
 
@@ -358,56 +362,21 @@ function Get-RegisteredProfilePath {
 }
 
 function Initialize-UserNative {
+    # Лишилось тільки DeleteProfile - для необов'язкового прибирання профілю при відкаті облікового запису,
+    # якщо користувач встиг хоч раз увійти. CreateProfile (примусове створення профілю) прибрано: саме воно
+    # призводило до появи тимчасових профілів TEMP / TEMP.<КОМПЬЮТЕР> при реальному вході користувача.
     if (-not ('LookNative.UserEnv' -as [type])) {
         Add-Type -Namespace LookNative -Name UserEnv -MemberDefinition @'
-[System.Runtime.InteropServices.DllImport("userenv.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
-public static extern int CreateProfile(string pszUserSid, string pszUserName, System.Text.StringBuilder pszProfilePath, uint cchProfilePath);
 [System.Runtime.InteropServices.DllImport("userenv.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
 public static extern bool DeleteProfile(string sidString, string profilePath, string computerName);
 '@
     }
 }
 
-function New-UserProfile {
-    # Создаёт профиль без входа пользователя. Возвращает путь профиля.
-    param([Parameter(Mandatory)][string]$Sid, [Parameter(Mandatory)][string]$Name)
-    Initialize-UserNative
-    $sb = New-Object System.Text.StringBuilder 260
-    $hr = [LookNative.UserEnv]::CreateProfile($Sid, $Name, $sb, 260)
-    if ($hr -eq 0) { return $sb.ToString() }
-    if ($hr -eq -2147024713) { return (Get-RegisteredProfilePath $Sid) }    # 0x800700B7: профиль уже есть
-    throw ("CreateProfile для '{0}' завершився з HRESULT 0x{1:X8}" -f $Name, $hr)
-}
-
 function Remove-UserProfile {
+    # $true, если профиль удалён или его не было вовсе (DeleteProfile на незарегистрированном SID не ошибка).
     param([Parameter(Mandatory)][string]$Sid)
+    if (-not (Get-RegisteredProfilePath $Sid)) { return $true }
     Initialize-UserNative
     [LookNative.UserEnv]::DeleteProfile($Sid, $null, $null)
-}
-
-function Initialize-AccountProfile {
-    # Гарантирует, что профиль учётки лежит по ожидаемому пути (на выбранном диске) и папка готова к установке прав.
-    param([hashtable]$Account, [string]$Path, [string]$Sid)
-    $reg = Get-RegisteredProfilePath $Sid
-    if ($reg) {
-        if (Test-SamePath $reg $Path) { return }
-        Write-Ui "Профіль '$($Account.Name)' вже існує в '$reg' (очікується '$Path')." Yellow
-        Write-Ui 'Перенос профілю не виконується. Можна ВИДАЛИТИ старий профіль разом з усіма даними (під цим користувачем не повинні бути виконані вхід) і створити заново на новому диску.' Yellow
-        if (-not (Confirm-Action "Видалити профіль '$reg' разом з даними і створити заново в '$Path'? Відкат цього кроку дані не поверне.")) {
-            Write-Log "'$($Account.Name)': профіль залишено в '$reg'" 'WARN'
-            return
-        }
-        if (-not (Remove-UserProfile -Sid $Sid)) { throw "Не вдалося видалити профіль '$reg' (користувач виконав вхід або профіль зайнятий?)" }
-        Write-Log "'$($Account.Name)': старий профіль '$reg' видалено" 'WARN'
-    }
-    if ((Test-Path -LiteralPath $Path) -and @(Get-ChildItem -LiteralPath $Path -Force).Count -eq 0) { Remove-Item -LiteralPath $Path -Force }
-    if (Test-Path -LiteralPath $Path) {
-        Write-Ui "Папка '$Path' вже існує і не порожня, профіль не створюється (Windows створить окремий профіль з суфіксом). Перевірте вміст." Yellow
-        return
-    }
-    $created = New-UserProfile -Sid $Sid -Name $Account.Name
-    if (-not (Test-SamePath $created $Path)) {
-        throw "Профіль '$($Account.Name)' створено в '$created', очікувалось '$Path'. Для RelocateProfiles ім'я папки (FolderName) має збігатися з іменем облікового запису."
-    }
-    Write-Log "Профіль '$($Account.Name)' створено: '$created'" 'OK'
 }

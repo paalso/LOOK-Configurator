@@ -4,6 +4,7 @@
     "local-accounts",
     "restore-point",
     "password-policy",
+    "account-lockout",
     "audit-policy",
     "user-rights",
     "event-log-settings",

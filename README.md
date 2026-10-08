@@ -181,3 +181,26 @@ SID или имя. Применяется через `secedit` ([Privilege Right
 Восстанавливать систему не обязательно, если вы не против почистить `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList`
 вручную: там могут быть "осиротевшие" подключи с `ProfileImagePath`, указывающим на удалённые временные папки, и флагом `Flags`
 с битом `RefCount`/`Temporary` (0x4) - такие подключи можно удалять не глядя, остальные - только сверив `ProfileImagePath`.
+
+## Блокування облікового запису (крок account-lockout, таблиця 4)
+Той самий механізм, що і `password-policy` (secedit, секція `[System Access]`): `LockoutBadCount` (поріг невдалих спроб),
+`LockoutDuration` (хвилини до автоматичного розблокування; 0 = до ручного розблокування адміністратором),
+`ResetLockoutCount` (хвилини до скидання лічильника невдалих спроб). Якщо `LockoutBadCount: 0` (поріг вимкнено),
+два інших параметри не надсилаються в secedit (Windows їх не приймає в такому разі) - перевірка показує
+"не застосовується", а не помилку. `ResetLockoutCount` не може перевищувати `LockoutDuration`, крім випадку
+`LockoutDuration: 0`.
+
+## Advanced Audit Policy в gpedit.msc (крок audit-policy)
+`auditpol /set` одразу застосовує підкатегорії до системи - сам аудит працює незалежно від того, що показує gpedit.
+Але якщо застосовані значення ніде не записані в сам локальний GPO, вузол gpedit.msc "Конфігурація комп'ютера ->
+Параметри безпеки -> Advanced Audit Policy Configuration" показує всі підкатегорії як "Не налаштовано", а
+"Local Policies -> Audit Policy" (9 базових категорій) - як "No auditing". Останнє - це нормально й за задумом:
+коли підкатегорії мають пріоритет (`SCENoApplyLegacyAuditPolicy=1`, п. 2 вимоги ЦПБ AU-2), Windows свідомо ігнорує
+9 базових категорій, і gpedit про це чесно повідомляє - це не ознака того, що аудит не працює.
+Щоб і "Advanced Audit Policy Configuration" показував реальні значення, крок пише `audit.csv` в той самий локальний
+GPO, що і `admin-templates` (`%SystemRoot%\System32\GroupPolicy\Machine\Microsoft\Windows NT\Audit\audit.csv`,
+розширення `{F3CCC681-B74C-4060-9F26-CD84525DCA2A}` в `gpt.ini`) і викликає `gpupdate`. Файл містить усі підкатегорії
+системи (не тільки змінені), тому в gpedit видно повну картину. GUID розширення взято з відкритої специфікації
+MS-GPAC і спільнотних джерел (LGPO), а не зі знятого дампа реального `gpt.ini` - якщо він виявиться неточним, це
+нешкідливо: `gpupdate` просто не підхопить файл через цю CSE, а сам аудит (auditpol) все одно застосовується і
+перевіряється окремо. Відкат повертає і `audit.csv`/`gpt.ini`, і саму політику аудиту (через `auditpol /restore`).

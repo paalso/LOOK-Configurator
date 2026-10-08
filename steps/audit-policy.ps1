@@ -7,14 +7,20 @@
     Id          = 'audit-policy'
     Title       = 'Політика аудиту (Audit Policies)'
     Reference   = 'ЦПБ AU-2; розділ 3.2.1, табл. 5'
-    Description = 'Розширена політика аудиту: усі підкатегорії (за замовчуванням Success+Failure, виключення в профілі) + пріоритет підкатегорій над базовими параметрами.'
+    Description = 'Розширена політика аудиту: усі підкатегорії (за замовчуванням Success+Failure, виключення в профілі) + пріоритет підкатегорій над базовими параметрами. Значення також записуються в audit.csv локального GPO, щоб "Advanced Audit Policy Configuration" в gpedit.msc показував їх (не "Не налаштовано").'
     Reversible  = $true
 
     Backup      = {
         param($ctx)
         $file = Save-AuditPolicySnapshot -Id $ctx.Id
         $cur = Get-LegacyAuditOverride
-        @{ File = $file; LegacyOverrideExisted = ($null -ne $cur); LegacyOverride = $cur }
+        $gp = Get-LocalGpoPaths
+        $b = @{ File = $file; LegacyOverrideExisted = ($null -ne $cur); LegacyOverride = $cur }
+        $b.GpoCsvExisted = Test-Path -LiteralPath $gp.AuditCsv
+        if ($b.GpoCsvExisted) { $b.GpoCsv = [System.IO.File]::ReadAllText($gp.AuditCsv, [System.Text.Encoding]::ASCII) }
+        $b.GpoIniExisted = Test-Path -LiteralPath $gp.Ini
+        if ($b.GpoIniExisted) { $b.GpoIni = [System.IO.File]::ReadAllText($gp.Ini, [System.Text.Encoding]::Default) }
+        $b
     }
 
     Apply       = {
@@ -40,6 +46,16 @@
 
         $force = if ($ctx.Params.ContainsKey('ForceSubcategoryOverride')) { [bool]$ctx.Params.ForceSubcategoryOverride } else { $true }
         if ($force) { Set-LegacyAuditOverride 1 }
+
+        # audit.csv локального GPO: щоб gpedit.msc (Advanced Audit Policy Configuration) показував застосовані
+        # значення, а не "Не налаштовано". Сам аудит уже діє (auditpol вище) незалежно від цього файлу.
+        $gp = Get-LocalGpoPaths
+        $applied = @(Get-AuditPolicy | ForEach-Object { $_.Value = Get-ExpectedAuditValue $ctx.Params $_.Guid $overrides; $_ })
+        Write-AuditPolicyGpoCsv -Path $gp.AuditCsv -Entries $applied
+        $ver = Update-LocalGpoIni -Path $gp.Ini -ExtensionGuid $Script:AuditCseGuid -ExtensionToolGuid $Script:AuditCseToolGuid
+        Write-Log "audit.csv локального GPO записано ($($applied.Count) підкатегорій), gpt.ini Version=$ver"
+        $null = Invoke-GroupPolicyRefresh
+
         Write-Log "Политика аудита применена (изменено подкатегорий: $(@($byValue.Values | ForEach-Object { $_ }).Count))" 'OK'
     }
 
@@ -66,12 +82,27 @@
         if ($force) {
             $cur = Get-LegacyAuditOverride
             New-Check 'Пріоритет підкатегорій над базовими (SCENoApplyLegacyAuditPolicy)' '1 (Ввімкнено)' $(if ($null -eq $cur) { 'не задано' } else { "$cur" }) ($cur -eq 1)
+            New-Check 'Local Policies -> Audit Policy (gpedit.msc, довідково)' '"No auditing" за задумом' 'за пріоритету підкатегорій ці 9 базових категорій Windows завжди показує як "No auditing" - це не помилка' $true
         }
+
+        $gp = Get-LocalGpoPaths
+        $csvOk = Test-Path -LiteralPath $gp.AuditCsv
+        New-Check 'audit.csv локального GPO (видно в Advanced Audit Policy Configuration)' 'існує' $(if ($csvOk) { 'існує' } else { 'не знайдено' }) $csvOk
     }
 
     Rollback    = {
         param($ctx, $backup)
         Restore-AuditPolicySnapshot -File $backup.File
         if ($backup.LegacyOverrideExisted) { Set-LegacyAuditOverride $backup.LegacyOverride } else { Set-LegacyAuditOverride $null }
+
+        $gp = Get-LocalGpoPaths
+        if ($backup.GpoCsvExisted) { [System.IO.File]::WriteAllText($gp.AuditCsv, [string]$backup.GpoCsv, [System.Text.Encoding]::ASCII) }
+        elseif (Test-Path -LiteralPath $gp.AuditCsv) { Remove-Item -LiteralPath $gp.AuditCsv -Force }
+        if ($backup.GpoIniExisted) {
+            [System.IO.File]::WriteAllText($gp.Ini, [string]$backup.GpoIni, [System.Text.Encoding]::Default)
+            $null = Update-LocalGpoIni -Path $gp.Ini -ExtensionGuid $Script:AuditCseGuid -ExtensionToolGuid $Script:AuditCseToolGuid
+        }
+        elseif (Test-Path -LiteralPath $gp.Ini) { Remove-Item -LiteralPath $gp.Ini -Force }
+        $null = Invoke-GroupPolicyRefresh
     }
 }

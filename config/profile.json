@@ -78,6 +78,14 @@
       "ClearTextPassword": 0
     },
 
+    // 3.1.2 Блокування облікового запису (табл. 4). LockoutBadCount=0 вимикає поріг - тоді LockoutDuration
+    // і ResetLockoutCount не застосовуються (Windows їх не приймає, це не помилка).
+    "account-lockout": {
+      "LockoutBadCount": 5,
+      "LockoutDuration": 30,
+      "ResetLockoutCount": 30
+    },
+
     // 3.2.1 Політика аудиту (табл. 5); Overrides: { "{GUID}": { "Success": false, "Failure": false } }
     "audit-policy": {
       "Default": {

@@ -13,10 +13,13 @@ $Script:PRegDword = 4
 $Script:PRegString = 1
 $Script:RegistryCseGuid = '{35378EAC-683F-11D2-A89A-00C04FBBCFA2}'
 $Script:RegistryCseToolGuid = '{D02B1F72-3407-48AE-BA88-E8213C6761F1}'
+$Script:AuditCseGuid = '{F3CCC681-B74C-4060-9F26-CD84525DCA2A}'
+$Script:AuditCseToolGuid = '{0F3F3735-573D-9804-99E4-AB2A69BA5FD4}'
 
 function Get-LocalGpoPaths {
     $root = if ($Script:LocalGpoRoot) { $Script:LocalGpoRoot } else { Join-Path $env:SystemRoot 'System32\GroupPolicy' }
-    @{ Root = $root; Machine = (Join-Path $root 'Machine'); Pol = (Join-Path $root 'Machine\Registry.pol'); Ini = (Join-Path $root 'gpt.ini') }
+    @{ Root = $root; Machine = (Join-Path $root 'Machine'); Pol = (Join-Path $root 'Machine\Registry.pol'); Ini = (Join-Path $root 'gpt.ini')
+        AuditCsv = (Join-Path $root 'Machine\Microsoft\Windows NT\Audit\audit.csv') }
 }
 
 # ---------- Registry.pol (PReg) ----------
@@ -170,8 +173,14 @@ function Get-LocalGpoIniInfo {
 }
 
 function Update-LocalGpoIni {
-    # Увеличивает машинную часть Version и гарантирует расширение Registry в gPCMachineExtensionNames.
-    param([Parameter(Mandatory)][string]$Path, [switch]$KeepExtension)
+    # Увеличивает машинную часть Version и гарантирует нужное расширение в gPCMachineExtensionNames.
+    # По умолчанию - Registry (адміністративні шаблони); -ExtensionGuid/-ExtensionToolGuid дозволяють
+    # додати інше розширення (наприклад, Audit Policy Configuration) без дублювання логіки.
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [string]$ExtensionGuid = $Script:RegistryCseGuid,
+        [string]$ExtensionToolGuid = $Script:RegistryCseToolGuid
+    )
     $lines = New-Object System.Collections.ArrayList
     foreach ($l in (Read-LocalGpoIni $Path)) { if ($l -ne '' -or $lines.Count -gt 0) { [void]$lines.Add($l) } }
     while ($lines.Count -gt 0 -and $lines[$lines.Count - 1] -eq '') { $lines.RemoveAt($lines.Count - 1) }
@@ -190,10 +199,10 @@ function Update-LocalGpoIni {
     if ($machine -eq 0) { $machine = 1 }
     $newVer = ($ver -band 0xFFFF0000) + $machine
     $verLine = "Version=$newVer"
-    $pair = '[' + $Script:RegistryCseGuid + $Script:RegistryCseToolGuid + ']'
+    $pair = '[' + $ExtensionGuid + $ExtensionToolGuid + ']'
     if ($verIdx -ge 0) { $lines[$verIdx] = $verLine } else { $lines.Insert($gen + 1, $verLine); if ($cseIdx -ge $gen + 1) { $cseIdx++ } }
     if ($cseIdx -ge 0) {
-        if (-not $lines[$cseIdx].ToUpperInvariant().Contains($Script:RegistryCseGuid)) {
+        if (-not $lines[$cseIdx].ToUpperInvariant().Contains($ExtensionGuid)) {
             $val = ($lines[$cseIdx] -split '=', 2)[1].Trim()
             $groups = @([regex]::Matches($val, '\[[^\]]*\]') | ForEach-Object { $_.Value }) + $pair
             $lines[$cseIdx] = 'gPCMachineExtensionNames=' + (($groups | Sort-Object { $_.ToUpperInvariant() }) -join '')
@@ -309,4 +318,30 @@ function Test-RegStateMatchesExpected {
     param($Expected, $Actual)
     if ($Expected.Kind -eq 'Value') { return ($Actual.Kind -eq 'Value' -and [int64]$Actual.Value -eq [int64]$Expected.Value) }
     $Actual.Kind -eq 'None'
+}
+
+# ---------- Audit.csv локального GPO (Advanced Audit Policy Configuration у gpedit.msc) ----------
+# auditpol /set застосовує підкатегорії одразу (це вже робить steps\audit-policy.ps1), але якщо значення
+# ніде не записані в сам локальний GPO, вузол "Advanced Audit Policy Configuration" у gpedit.msc і
+# "Local Policies -> Audit Policy" показують "Не налаштовано"/"No auditing" - виглядає так, ніби нічого
+# не застосувалося, хоча реально аудит уже працює. Цей файл - те саме джерело, з якого читає сам gpedit.msc.
+
+function ConvertTo-AuditCsvSetting {
+    param([int]$Value)
+    switch ($Value) { 0 { 'No Auditing' } 1 { 'Success' } 2 { 'Failure' } 3 { 'Success and Failure' } default { 'No Auditing' } }
+}
+
+function Write-AuditPolicyGpoCsv {
+    # $Entries: @{ Guid; Name; Value } (те саме, що повертає Get-AuditPolicy) - весь перелік підкатегорій,
+    # не тільки змінені: gpedit показує той набір, що є у файлі, решту - як "Не налаштовано".
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)]$Entries)
+    $lines = New-Object System.Collections.ArrayList
+    [void]$lines.Add('Machine Name,Policy Target,Subcategory,Subcategory GUID,Inclusion Setting,Exclusion Setting,Setting Value')
+    foreach ($e in ($Entries | Sort-Object Name)) {
+        $setting = ConvertTo-AuditCsvSetting ([int]$e.Value)
+        [void]$lines.Add((',System,{0},{1},{2},,{3}' -f $e.Name, $e.Guid, $setting, [int]$e.Value))
+    }
+    $dir = Split-Path -Parent $Path
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    [System.IO.File]::WriteAllText($Path, (($lines -join "`r`n") + "`r`n"), [System.Text.Encoding]::ASCII)
 }
